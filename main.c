@@ -145,6 +145,7 @@ int main() {
     fputs(data, hosts);
     fclose(hosts);
     printf("Hosts file successfully modified!\nYou may now visit http://timmartillpermis.se.\n");
+    Sleep(3000);
     
     free(ip);
     return 0;   
