@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <windows.h>
 #include <shellapi.h>
+#include <string.h>
 
 BOOL IsUserAnAdmin() {
     BOOL isAdmin = FALSE;
@@ -22,11 +23,85 @@ BOOL IsUserAnAdmin() {
     return isAdmin;
 }
 
+int ttp_already_exists() {
+    FILE *hosts = fopen("C:\\Windows\\System32\\drivers\\etc\\hosts", "r");
+    FILE *temp  = fopen("C:\\Windows\\System32\\drivers\\etc\\hosts_temp", "w");
+    char buffer[256];
+    int found = 0;
+    int success = 1;
+
+    // Reads through the hosts file line by line
+    while (fgets(buffer, sizeof(buffer), hosts)) {
+        // If current line is line after timmartillpermis
+        if (found) {
+            found = 0;
+            continue;
+        }
+
+        // If timmartillpermis exists in the hosts file
+        if (strstr(buffer, "# Timmartillpermis")) {
+            found = 1;
+            success = 0;
+            continue;
+        }
+        
+        // Writes every line of hosts into a temp file
+        fputs(buffer, temp);
+    }
+    fclose(hosts);
+    fclose(temp);
+
+    remove("C:\\Windows\\System32\\drivers\\etc\\hosts");
+    rename("C:\\Windows\\System32\\drivers\\etc\\hosts_temp", "C:\\Windows\\System32\\drivers\\etc\\hosts");
+
+    if (success == 0) {
+        return 0;
+    } else {
+        return 1;
+    }
+}
+
+char *get_ip() {
+    FILE *arp_process;
+    char data[256];
+    char result[256] ="";
+    char *ip = malloc(32);
+
+    if (ip == NULL) {
+        printf("Memory allocation failed.\n");
+        return NULL;
+    }
+
+    arp_process = popen("powershell -Command \"arp -a | Select-String -Pattern '00-11-11-03-83-fa'\"", "r");
+    if (arp_process == NULL) {
+        printf("Couldn't run command.\n");
+        return NULL;
+    }
+    
+    for (int i = 0; i < 3; i++) {
+        char *res = fgets(data, sizeof(data), arp_process); 
+        if (i == 1 && res != NULL) {
+            strcat(result, data);
+        }
+    }
+    pclose(arp_process);
+
+    char *ip_start = strstr(result, "10.");
+    if (ip_start != NULL) {
+        sscanf(ip_start, "%15[0-9.]", ip);
+    } else {
+        printf("Couldn't find IP in arp cache.\n");
+        return NULL;
+    }
+    
+    return ip;
+}
+
 int main() {
     if (!IsUserAnAdmin()) {
         SHELLEXECUTEINFO sei = { sizeof(sei) };
         sei.lpVerb = "runas";
-        sei.lpFile = "local-ttp.exe";
+        sei.lpFile = "local-ttp-v1.1.exe";
         sei.hwnd = NULL;
         sei.nShow = SW_NORMAL;
 
@@ -38,10 +113,17 @@ int main() {
         return 0; // Exits unpriveleged program.
     }
 
-    char data[128] = "\n\n# Timmartillpermis\r\n10.80.72.87 timmartillpermis.se";
-
-    FILE *hosts;
-    hosts = fopen("C:\\Windows\\System32\\drivers\\etc\\hosts", "a");
+    int ttp_existed = ttp_already_exists();
+    char data[128];
+    FILE *hosts = fopen("C:\\Windows\\System32\\drivers\\etc\\hosts", "a");
+    
+    char *hosts_str;
+    if (ttp_existed == 1) {
+        hosts_str = "\n\n# Timmartillpermis\r\n%s timmartillpermis.se";
+    } else {
+        hosts_str = "# Timmartillpermis\r\n%s timmartillpermis.se";
+    }
+    sprintf(data, hosts_str, get_ip());
 
     if (hosts == NULL) {
         printf("Couldn't open hosts file.\n");
