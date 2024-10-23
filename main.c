@@ -9,6 +9,7 @@ BOOL IsUserAnAdmin() {
     PSID adminGroup = NULL;
     
     // Allocate and initialize a SID for the administrators group.
+    // Windows API Stuff.
     SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
     if (AllocateAndInitializeSid(&NtAuthority, 2,
                                  SECURITY_BUILTIN_DOMAIN_RID,
@@ -32,13 +33,14 @@ int ttp_already_exists() {
 
     // Reads through the hosts file line by line
     while (fgets(buffer, sizeof(buffer), hosts)) {
-        // If current line is line after timmartillpermis
+        
+        // If current line is the line after timmartillpermis
         if (found) {
             found = 0;
             continue;
         }
 
-        // If timmartillpermis exists in the hosts file
+        // If timmartillpermis entry exists in the hosts file
         if (strstr(buffer, "# Timmartillpermis")) {
             found = 1;
             success = 0;
@@ -72,12 +74,14 @@ char *get_ip() {
         return NULL;
     }
 
+    // Opens a powershell process as a "file", reading the output of it.
     arp_process = popen("powershell -Command \"arp -a | Select-String -Pattern '00-11-11-03-83-fa'\"", "r");
     if (arp_process == NULL) {
         printf("Couldn't run command.\n");
         return NULL;
     }
     
+    // Filters the output until the line with the IP is read. Appends it to result.
     for (int i = 0; i < 3; i++) {
         char *res = fgets(data, sizeof(data), arp_process); 
         if (i == 1 && res != NULL) {
@@ -86,9 +90,11 @@ char *get_ip() {
     }
     pclose(arp_process);
 
+    // Searches the result line for the start of the IP address.
+    // Creates a pointer to it.
     char *ip_start = strstr(result, "10.");
     if (ip_start != NULL) {
-        sscanf(ip_start, "%15[0-9.]", ip);
+        sscanf(ip_start, "%15[0-9.]", ip);  // Reads the 15 first numbers and dots from the start of the IP and writes them to the ip variable.
     } else {
         printf("Couldn't find IP in arp cache.\n");
         return NULL;
@@ -98,6 +104,8 @@ char *get_ip() {
 }
 
 int main() {
+
+    // Runs the program with elevated priveleges to be able to access the hosts file.
     if (!IsUserAnAdmin()) {
         SHELLEXECUTEINFO sei = { sizeof(sei) };
         sei.lpVerb = "runas";
@@ -113,17 +121,21 @@ int main() {
         return 0; // Exits unpriveleged program.
     }
 
+    // Checks if entry already exists in the hosts file.
     int ttp_existed = ttp_already_exists();
     char data[128];
     FILE *hosts = fopen("C:\\Windows\\System32\\drivers\\etc\\hosts", "a");
     
+    // Fixes formatting for the hosts file
     char *hosts_str;
     if (ttp_existed == 1) {
         hosts_str = "\n\n# Timmartillpermis\r\n%s timmartillpermis.se";
     } else {
         hosts_str = "# Timmartillpermis\r\n%s timmartillpermis.se";
     }
-    sprintf(data, hosts_str, get_ip());
+    // Gets the correct IP, formats it into the string and writes it to the data variable.
+    char *ip = get_ip();
+    sprintf(data, hosts_str, ip);
 
     if (hosts == NULL) {
         printf("Couldn't open hosts file.\n");
@@ -134,5 +146,6 @@ int main() {
     fclose(hosts);
     printf("Hosts file successfully modified!\nYou may now visit http://timmartillpermis.se.\n");
     
+    free(ip);
     return 0;   
 }
